@@ -22,6 +22,7 @@ const DashboardPage = () => {
     const [nextQueueVisible, setNextQueueVisible] = useState(false);
     const [dropdownVisible, setDropdownVisible] = useState(false);
     const websocketRef = useRef<WebSocket | null>(null);
+    const [completedQueues, setCompletedQueues] = useState<Queue[]>([]);
 
     const handleDepartmentSelect = (dept: string) => {
         setSelectedDept(dept);
@@ -203,12 +204,10 @@ const DashboardPage = () => {
 
     const handleNextQueue = () => {
         if (currentQueue) {
-            // Set the next queue as the currentQueue
-            const nextQueue = waitingQueues.length > 0 ? waitingQueues[0] : null;
-            setCurrentQueue(nextQueue);
-
-            // Show the Assign button for the next queue
-            setNextQueueVisible(false); // Disable Next Queue button
+            setCompletedQueues((prev) => [...prev, currentQueue]); // Move current queue to completed
+            const nextQueue = waitingQueues.slice(1); // Get remaining queues
+            setWaitingQueues(nextQueue);
+            setCurrentQueue(nextQueue.length > 0 ? nextQueue[0] : null); // Set the next queue
         }
     };
     
@@ -232,7 +231,7 @@ const DashboardPage = () => {
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-blue-500 to-white p-4">
-            {/* Header Section */}
+            {/* Header_1 */}
             <div className="flex justify-between items-center bg-white p-4 shadow rounded-t-md">
                 <div className="flex items-center space-x-2">
                     <img
@@ -307,22 +306,22 @@ const DashboardPage = () => {
                 </div>
             </div>
 
-            {/* Current Queue */}
-            <div className="flex justify-center items-center bg-white p-4 shadow rounded-b-md border-t-2 border-gray-100">
+            {/* Header_2 */}
+            <div className="flex justify-center items-center bg-white pl-32 p-4 shadow rounded-b-md border-t-2 border-gray-100">
                 <div className="flex items-center space-x-2">
                     <h1 className="text-xl font-bold text-black">Queue {currentQueue?.queueNumber}</h1>
                     <p className="text-gray-500">/ In progress on channel 1</p>
                 </div>
-                {nextQueueVisible && (
-                    <div className="text-right">
+                
+                    <div className="pl-10 text-right">
                         <button
                             onClick={handleNextQueue}
-                            className="bg-white border-2 border-rose-500 text-rose-500 px-4 py-2 rounded-md"
+                            className="bg-rose-500 text-white px-4 py-3 rounded-md"
                         >
                             Next Queue
                         </button>
                     </div>
-                )}
+                
             </div>
 
             {/* Queue Sections */}
@@ -331,7 +330,7 @@ const DashboardPage = () => {
                 <div className="bg-white shadow rounded-lg p-4">
                     <h2 className="text-xl font-bold text-gray-700 mb-4">Completed Queue</h2>
                     <div className="space-y-4 overflow-y-auto max-h-[500px]">
-                        {queues.map((queue) => (
+                        {completedQueues.map((queue) => (
                             <div
                                 key={queue.queueNumber}
                                 className="flex justify-between items-center border-b pb-2"
@@ -347,96 +346,33 @@ const DashboardPage = () => {
                 </div>
 
                 {/* Right Column: Waiting List */}
-                <div className="bg-white shadow rounded-lg p-4">
-                    <h2 className="text-xl font-bold text-gray-700 mb-4">Waiting List</h2>
-                    <div className="space-y-4 overflow-y-auto max-h-[500px]">
-                        {waitingQueues.map((queue) => (
-                            <div
-                                key={queue.queueNumber}
-                                className="flex items-center justify-between border-b pb-2"
-                            >
-                                <p className="w-28 text-sm text-gray-500 text-left">
-                                    Queue
-                                </p>
-                                <p className="w-1/2 font-bold text-lg text-black text-left">
-                                    {queue.queueNumber}
-                                </p>
+<div className="bg-white shadow rounded-lg p-4">
+    <h2 className="text-xl font-bold text-gray-700 mb-4">Waiting List</h2>
+    <div className="border-t-2 border-gray-100 pt-2 space-y-4 overflow-y-auto max-h-[500px]">
+        {waitingQueues.map((queue) => (
+            <div
+            key={queue.queueNumber}
+            className="flex border-b pl-4 pb-2 items-center"
+        >
+            <p className="w-1/2 text-left flex items-center space-x-2">
+                <span className="font-bold text-lg text-black">{queue.queueNumber}</span>
+                <span className="text-sm text-gray-500 pl-4">{queue.patient_firstname} {queue.patient_lastname}</span>
+            </p>
+        
+            {queue === currentQueue ? (
+                <button
+                    className="w-[150px] py-2 rounded-md border-2 border-yellow-600 text-yellow-600 bg-white ml-auto"
+                    disabled
+                >
+                    In Progress
+                </button>
+            ) : null}
+        </div>
+        
+        ))}
+    </div>
+</div>
 
-                                <p className="w-1/2 text-sm text-gray-500 text-center">
-                                    {queue.patient_firstname} {queue.patient_lastname}
-                                </p>
-
-                                <div className="w-1/4 text-right">
-                                    <button
-                                        onClick={() => handleAssign(queue)}
-                                        className={`px-10 py-2 rounded-md text-white ${queue.queueNumber === currentQueue?.queueNumber
-                                                ? 'bg-green-500 hover:bg-green-600'
-                                                : 'bg-gray-300 cursor-not-allowed'
-                                            }`}
-                                        disabled={queue.queueNumber !== currentQueue?.queueNumber}
-                                    >
-                                        Assign
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-
-
-                {/* Waiting List */}
-                {isModalOpen && selectedQueue && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
-                        <div className="bg-white rounded-lg shadow-lg p-6 w-96">
-                            <h2 className="text-2xl font-bold text-black text-center mb-4">
-                                Queue {selectedQueue.queueNumber}
-                            </h2>
-                            <p className="text-center text-xl text-black mb-6">
-                                {selectedQueue.patient_firstname} {selectedQueue.patient_lastname}
-                            </p>
-                            <div className="mb-4">
-                                <label
-                                    htmlFor="department"
-                                    className="block text-gray-700 mb-2 text-center"
-                                >
-                                    Select Department
-                                </label>
-                                <select
-                                    id="department"
-                                    value={department}
-                                    onChange={(e) => setDepartment(e.target.value)}
-                                    className="w-full border text-gray-500 border-gray-300 rounded-md px-3 py-2"
-                                >
-                                    <option value="" disabled hidden>
-                                        Assign a department
-                                    </option>
-                                    <option value="Cardiology">Cardiology</option>
-                                    <option value="Payment">Payment</option>
-                                    <option value="Dentistry">Dentistry</option>
-                                </select>
-                            </div>
-                            <div className="flex justify-end space-x-4">
-                                <button
-                                    onClick={handleCancel}
-                                    className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleConfirm}
-                                    disabled={!department}
-                                    className={`${department
-                                        ? 'bg-blue-500 hover:bg-blue-600'
-                                        : 'bg-blue-300 cursor-not-allowed'
-                                        } text-white px-4 py-2 rounded-md`}
-                                >
-                                    Confirm
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
         </div>
     );

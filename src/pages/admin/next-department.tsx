@@ -411,7 +411,7 @@ const DashboardPage = () => {
                                     <option value="" disabled hidden>
                                         Assign a department
                                     </option>
-                                    <option value="Cardiology">Cardiology</option>
+                                    <option value="Screening Center">Screening Center</option>
                                     <option value="Payment">Payment</option>
                                     <option value="Dentistry">Dentistry</option>
                                 </select>
