@@ -3,9 +3,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 
 type Queue = {
+    queue_id: string;
     queueNumber: string;
     patient_firstname: string;
     patient_lastname: string;
+    remaining_queue: number;
 };
 const DashboardPage = () => {
     const router = useRouter();
@@ -66,17 +68,13 @@ const DashboardPage = () => {
     }, [router.pathname, selectedDept]);
 
     
-    
-
     const fetchQueueData = async (department: string) => {
         try {
             setLoading(true);
     
             const response = await fetch(
-                `https://203o7qhoh2.execute-api.us-east-1.amazonaws.com/queue/totalqueue?dept_name=${encodeURIComponent(
-                    department
-                )}`,
-                { method: "GET" }
+                `https://203o7qhoh2.execute-api.us-east-1.amazonaws.com/queue/totalqueue?dept_name=${encodeURIComponent(department)}`,
+                { method: 'GET' }
             );
     
             if (!response.ok) {
@@ -84,18 +82,27 @@ const DashboardPage = () => {
             }
     
             const data = await response.json();
-            console.log('Fetched data:', data); // Debug the response
+            console.log('Fetched data:', data);
     
-            if (!data || !('totalQueue' in data)) {
-                throw new Error('Invalid response structure');
+            // Validate API response structure
+            if (!data || typeof data.totalQueue !== 'number' || !Array.isArray(data.queues)) {
+                throw new Error('Invalid API response structure');
             }
     
-            setTotalQueue(data.totalQueue || 0);
+            setTotalQueue(data.totalQueue);
     
-            // Handle queues only if they exist in the response
-            const fetchedQueues = data.queues || [];
-            setWaitingQueues(fetchedQueues);
-            setCurrentQueue(fetchedQueues.length > 0 ? fetchedQueues[0] : null);
+            const filteredQueues = data.queues
+                .map((queue: any) => ({
+                    queue_id: queue.queue_id,
+                    queueNumber: queue.queueNumber,
+                    patient_firstname: queue.patient_firstname,
+                    patient_lastname: queue.patient_lastname,
+                    remaining_queue: queue.remaining_queue,
+                }))
+                .sort((a: Queue, b: Queue) => a.remaining_queue - b.remaining_queue);
+    
+            setWaitingQueues(filteredQueues);
+            setCurrentQueue(filteredQueues.length > 0 ? filteredQueues[0] : null);
         } catch (error) {
             console.error('Error fetching queue data:', error);
             setTotalQueue(null);
@@ -107,7 +114,6 @@ const DashboardPage = () => {
     };
     
       
-
     const handleAssign = (queue: Queue) => {
         if (queue === currentQueue) {
             setSelectedQueue(queue);
@@ -124,43 +130,61 @@ const DashboardPage = () => {
     const handleConfirm = async () => {
         if (selectedQueue && department) {
             try {
-                const message = {
-                    type: 'updateQueue',
-                    queueNumber: selectedQueue.queueNumber,
-                    patient_firstname: selectedQueue.patient_firstname,
-                    patient_lastname: selectedQueue.patient_lastname,
+                // Prepare the payload for the API request
+                const payload = {
+                    queue_id: selectedQueue.queue_id, // Ensure this maps correctly
                     dept_name: department,
+                    room_number: null, // Pass room_number if available
                 };
     
-                console.log('Sending data to WebSocket:', message);
+                console.log('Sending payload to updatequeue endpoint:', payload);
     
-                if (websocketRef.current?.readyState === WebSocket.OPEN) {
-                    websocketRef.current.send(JSON.stringify(message));
-                    console.log('Queue successfully sent to WebSocket');
-                } else {
-                    console.error('WebSocket is not connected');
-                    alert('WebSocket connection is not established. Please try again.');
+                // Send the request to the update endpoint
+                const response = await fetch(
+                    'https://duq6zvqdd3.execute-api.us-east-1.amazonaws.com/updatequeue/updatequeue',
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(payload),
+                    }
+                );
+    
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Error response from API:', errorText);
+                    throw new Error(`API Error: ${errorText}`);
                 }
     
-                // Reset modal state
+                const result = await response.json();
+                console.log('Queue successfully updated:', result);
+    
+                // Update state and UI
                 setIsModalOpen(false);
                 setSelectedQueue(null);
                 setDepartment('');
+                alert('Queue updated successfully!');
             } catch (error) {
-                console.error('Error sending data via WebSocket:', error);
-                alert('Failed to update the queue. Please try again.');
+                if (error instanceof Error) {
+                    console.error('Error during queue update:', error.message);
+                    alert(`Error updating queue: ${error.message}`);
+                } else {
+                    console.error('Unexpected error during queue update:', error);
+                    alert('An unexpected error occurred while updating the queue.');
+                }
             }
         }
     };
 
-    /*
+    
     const connectWebSocket = () => {
         if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
             console.log("WebSocket already connected.");
             return;
         }
     
-        const websocket = new WebSocket('wss://inkwwyt107.execute-api.us-east-1.amazonaws.com/dev/');
+        const websocket = new WebSocket('wss://g3jo9j2tn5.execute-api.us-east-1.amazonaws.com/queue/');
     
         websocket.onopen = () => {
             console.log('WebSocket connection established');
@@ -181,10 +205,22 @@ const DashboardPage = () => {
             try {
                 const message = JSON.parse(event.data);
                 console.log('WebSocket message received:', message);
+        
+                if (message.type === 'queueUpdate' && message.department === selectedDept) {
+                    const updatedQueues = message.queues;
+        
+                    // Sort the queues by remaining_queue
+                    const sortedQueues = updatedQueues.sort((a: Queue, b: Queue) => a.remaining_queue - b.remaining_queue);
+        
+                    // Update state
+                    setWaitingQueues(sortedQueues);
+                    setCurrentQueue(sortedQueues.length > 0 ? sortedQueues[0] : null);
+                }
             } catch (error) {
                 console.error('Error processing WebSocket message:', error);
             }
         };
+        
     };
     
     useEffect(() => {
@@ -199,7 +235,7 @@ const DashboardPage = () => {
                 websocketRef.current = null;
             }
         };
-    }, []);  */
+    }, []); 
 
     const handleNextQueue = () => {
         if (currentQueue) {
@@ -333,7 +369,7 @@ const DashboardPage = () => {
                     <div className="space-y-4 overflow-y-auto max-h-[500px]">
                         {queues.map((queue) => (
                             <div
-                                key={queue.queueNumber}
+                                key={queue.queue_id}
                                 className="flex justify-between items-center border-b pb-2"
                             >
                                 <div>

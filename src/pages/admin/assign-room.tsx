@@ -1,20 +1,19 @@
-// assign-room.tsx
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { rooms as initialRooms } from './data/roomData';
+import { rooms as initialRooms } from './data/roomData'; // Import rooms data
 
 type Room = {
   room: string;
   name: string;
-  status: string;
-  department?: string;
+  status: string; // Ensure status is included
 };
 
 const AssignRoomPage = () => {
   const router = useRouter();
-  const { id, name, department } = router.query;
+  const { queueNumber, patientFirstname, patientLastname } = router.query;
 
   const [currentTime, setCurrentTime] = useState('');
+  const [rooms, setRooms] = useState<Room[]>(initialRooms); // Initialize with room data
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [isPopupOpen, setIsPopupOpen] = useState(false);
 
@@ -42,20 +41,31 @@ const AssignRoomPage = () => {
 
   const handleConfirm = () => {
     if (selectedRoom) {
-        const updatedQueue = {
-            id: router.query.id as string,
-            name: router.query.name as string,
-            status: 'In progress',
-        };
+      // Mark the room as "In Progress"
+      const updatedRooms = rooms.map((room) =>
+        room.room === selectedRoom.room
+          ? { ...room, status: 'In Progress' }
+          : room
+      );
+      setRooms(updatedRooms);
 
-        // Save the updated queue to localStorage
-        localStorage.setItem('currentQueue', JSON.stringify(updatedQueue));
+      // Save the assigned queue data to localStorage
+      const assignedQueue = {
+        queueNumber,
+        patientFirstname,
+        patientLastname,
+        room: selectedRoom.room,
+        doctor: selectedRoom.name,
+      };
+      const assignedQueues =
+        JSON.parse(localStorage.getItem('assignedQueues') || '[]');
+      assignedQueues.push(assignedQueue);
+      localStorage.setItem('assignedQueues', JSON.stringify(assignedQueues));
 
-        // Redirect to admin-dashboard
-        router.push('/admin/admin-dashboard?nextQueue=true');
+      // Redirect back to next-department
+      router.push('/admin/next-department');
     }
-};
-
+  };
 
   const handleCancel = () => {
     setSelectedRoom(null);
@@ -101,7 +111,7 @@ const AssignRoomPage = () => {
 
       <div className="flex justify-center items-center bg-white p-4 shadow rounded-b-md border-t-2 border-gray-100">
         <div className="flex items-center space-x-2">
-          <h1 className="text-xl font-bold text-black">Queue {id}</h1>
+          <h1 className="text-xl font-bold text-black">Queue {queueNumber}</h1>
           <p className="text-gray-500">/ In progress on channel 1</p>
         </div>
       </div>
@@ -115,18 +125,20 @@ const AssignRoomPage = () => {
           >
             Back
           </button>
-          <h1 className="absolute left-1/2 transform -translate-x-1/2 text-2xl font-bold text-black">
-            Queue {id}
+          <h1 className="absolute left-1/2 transform -translate-x-1/2 text-3xl font-bold text-black">
+            {queueNumber}
           </h1>
         </div>
 
         <div className="flex flex-col items-center justify-center border-b-2 border-gray-100">
-          <p className="text-lg text-gray-700 mb-6">{name}</p>
+          <p className="text-lg text-gray-700 mb-6">
+            {patientFirstname} {patientLastname}
+          </p>
         </div>
 
         {/* Room List */}
         <div className="space-y-4 overflow-y-auto max-h-[450px] mt-4">
-          {initialRooms.map((room: Room, index) => (
+          {rooms.map((room, index) => (
             <div
               key={index}
               className="flex justify-between items-center border-b pb-2"
@@ -135,18 +147,13 @@ const AssignRoomPage = () => {
                 <p className="text-lg font-bold text-black">{room.room}</p>
                 <p className="text-lg text-gray-700">- {room.name}</p>
               </div>
-              <div className="flex items-center space-x-2">
-                <p className="text-sm text-gray-500">
-                  {department ? `${department} -` : ''} {room.department}
-                </p>
-              </div>
               <button
                 onClick={() => handleBookClick(room)}
                 className={`w-52 h-11 ${
                   room.status === 'Book'
                     ? 'bg-green-500 hover:bg-green-600'
                     : 'bg-gray-300 cursor-not-allowed'
-                } text-white px-14 py-2 rounded-md`}
+                } text-white px-4 py-2 rounded-md`}
                 disabled={room.status !== 'Book'}
               >
                 {room.status}
@@ -164,7 +171,11 @@ const AssignRoomPage = () => {
             <p className="text-lg text-black">{selectedRoom.room}</p>
             <p className="text-lg text-gray-700">{selectedRoom.name}</p>
             <div className="my-6">
-              <img src="/image-admin/icon-confirmation.png" alt="Confirmation" className="mx-auto w-40" />
+              <img
+                src="/image-admin/icon-confirmation.png"
+                alt="Confirmation"
+                className="mx-auto w-40"
+              />
             </div>
             <div className="flex justify-around mt-4">
               <button

@@ -7,7 +7,16 @@ type Queue = {
     patient_firstname: string;
     patient_lastname: string;
 };
-const DashboardPage = () => {
+
+type AssignedQueue = {
+    queueNumber: string;
+    patientFirstname: string;
+    patientLastname: string;
+    room: string;
+};
+
+
+const NextDepartmentPage = () => {
     const router = useRouter();
     const [totalQueue, setTotalQueue] = useState<number | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
@@ -22,11 +31,13 @@ const DashboardPage = () => {
     const [nextQueueVisible, setNextQueueVisible] = useState(false);
     const [dropdownVisible, setDropdownVisible] = useState(false);
     const websocketRef = useRef<WebSocket | null>(null);
+    const [assignedQueues, setAssignedQueues] = useState<AssignedQueue[]>([]);
+
 
     const handleDepartmentSelect = (dept: string) => {
         setSelectedDept(dept);
         setDropdownVisible(false);
-    
+
         if (dept === 'Cardiology') {
             router.push('/admin/next-department');
         } else if (dept === 'Screening Center') {
@@ -39,59 +50,66 @@ const DashboardPage = () => {
     };
 
     useEffect(() => {
+        const storedQueues = JSON.parse(localStorage.getItem('assignedQueues') || '[]');
+        console.log('Loaded Assigned Queues:', storedQueues); // Debugging
+        setAssignedQueues(storedQueues);
+    }, []);
+
+
+    useEffect(() => {
         const deptMap: { [key: string]: string } = {
             '/admin/next-department': 'Cardiology',
             '/admin/admin-dashboard': 'Screening Center',
             '/admin/payment-page': 'Payment',
             '/admin/dispensary': 'Dispensary',
         };
-    
+
         const newDept = deptMap[router.pathname];
         if (newDept && newDept !== selectedDept) {
             setSelectedDept(newDept);
         }
     }, [router.pathname]);
-    
+
 
     useEffect(() => {
         if (selectedDept) {
             fetchQueueData(selectedDept);
         }
     }, [selectedDept]);
-    
+
 
     useEffect(() => {
         console.log('Current path:', router.pathname);
         console.log('Selected department:', selectedDept);
     }, [router.pathname, selectedDept]);
 
-    
-    
+
+
 
     const fetchQueueData = async (department: string) => {
         try {
             setLoading(true);
-    
+
             const response = await fetch(
                 `https://203o7qhoh2.execute-api.us-east-1.amazonaws.com/queue/totalqueue?dept_name=${encodeURIComponent(
                     department
                 )}`,
                 { method: "GET" }
             );
-    
+
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-    
+
             const data = await response.json();
             console.log('Fetched data:', data); // Debug the response
-    
+
             if (!data || !('totalQueue' in data)) {
                 throw new Error('Invalid response structure');
             }
-    
+
             setTotalQueue(data.totalQueue || 0);
-    
+
             // Handle queues only if they exist in the response
             const fetchedQueues = data.queues || [];
             setWaitingQueues(fetchedQueues);
@@ -105,15 +123,21 @@ const DashboardPage = () => {
             setLoading(false);
         }
     };
-    
-      
+
 
     const handleAssign = (queue: Queue) => {
         if (queue === currentQueue) {
-            setSelectedQueue(queue);
-            setIsModalOpen(true);
+            router.push({
+                pathname: '/admin/assign-room',
+                query: {
+                    queueNumber: queue.queueNumber,
+                    patientFirstname: queue.patient_firstname,
+                    patientLastname: queue.patient_lastname,
+                },
+            });
         }
     };
+
 
     const handleCancel = () => {
         setIsModalOpen(false);
@@ -131,9 +155,9 @@ const DashboardPage = () => {
                     patient_lastname: selectedQueue.patient_lastname,
                     dept_name: department,
                 };
-    
+
                 console.log('Sending data to WebSocket:', message);
-    
+
                 if (websocketRef.current?.readyState === WebSocket.OPEN) {
                     websocketRef.current.send(JSON.stringify(message));
                     console.log('Queue successfully sent to WebSocket');
@@ -141,7 +165,7 @@ const DashboardPage = () => {
                     console.error('WebSocket is not connected');
                     alert('WebSocket connection is not established. Please try again.');
                 }
-    
+
                 // Reset modal state
                 setIsModalOpen(false);
                 setSelectedQueue(null);
@@ -211,7 +235,7 @@ const DashboardPage = () => {
             setNextQueueVisible(false); // Disable Next Queue button
         }
     };
-    
+
     // Use another effect for time updates
     useEffect(() => {
         const interval = setInterval(() => {
@@ -224,10 +248,10 @@ const DashboardPage = () => {
                 })
             );
         }, 1000);
-    
+
         return () => clearInterval(interval);
     }, []);
-    
+
 
 
     return (
@@ -327,51 +351,47 @@ const DashboardPage = () => {
 
             {/* Queue Sections */}
             <div className="grid grid-cols-2 gap-6 mt-6">
-                {/* Left Column: Completed Queues */}
+                {/* Left Column */}
                 <div className="bg-white shadow rounded-lg p-4">
-                    <h2 className="text-xl font-bold text-gray-700 mb-4">Completed Queue</h2>
-                    <div className="space-y-4 overflow-y-auto max-h-[500px]">
-                        {queues.map((queue) => (
-                            <div
-                                key={queue.queueNumber}
-                                className="flex justify-between items-center border-b pb-2"
-                            >
-                                <div>
-                                    <p className="font-bold text-black">{queue.queueNumber}</p>
-                                    <p className="text-sm text-gray-500">{queue.patient_firstname} {queue.patient_lastname}</p>
-                                </div>
-
-                            </div>
-                        ))}
+                    <h2 className="text-xl font-bold text-gray-700 mb-4">Waiting List</h2>
+                    <div className="border-t-2 border-gray-100 pt-2 space-y-4 overflow-y-auto max-h-[500px]">
+                        <ul>
+                            {assignedQueues.map((queue, index) => (
+                                <li
+                                    key={index}
+                                    className="grid grid-cols-2 border-b py-3 items-center">
+                                    <p className="col-span-1 font-bold text-lg text-black">
+                                        {queue.queueNumber}
+                                    </p>
+                                    <p className="col-span-1 text-sm text-gray-500">
+                                        {queue.patientFirstname} {queue.patientLastname}
+                                    </p>
+                                </li>
+                            ))}
+                        </ul>
                     </div>
                 </div>
 
-                {/* Right Column: Waiting List */}
+                {/* Right Column */}
                 <div className="bg-white shadow rounded-lg p-4">
                     <h2 className="text-xl font-bold text-gray-700 mb-4">Waiting List</h2>
-                    <div className="space-y-4 overflow-y-auto max-h-[500px]">
+                    <div className="border-t-2 border-gray-100 pt-2 space-y-4 overflow-y-auto max-h-[500px]">
                         {waitingQueues.map((queue) => (
                             <div
                                 key={queue.queueNumber}
-                                className="flex items-center justify-between border-b pb-2"
+                                className="flex border-b pl-4 pb-2 items-center"
                             >
-                                <p className="w-28 text-sm text-gray-500 text-left">
-                                    Queue
-                                </p>
-                                <p className="w-1/2 font-bold text-lg text-black text-left">
-                                    {queue.queueNumber}
+                                <p className="w-1/2 text-left flex items-center space-x-2">
+                                    <span className="font-bold text-lg text-black">{queue.queueNumber}</span>
+                                    <span className="text-sm text-gray-500 pl-4">{queue.patient_firstname} {queue.patient_lastname}</span>
                                 </p>
 
-                                <p className="w-1/2 text-sm text-gray-500 text-center">
-                                    {queue.patient_firstname} {queue.patient_lastname}
-                                </p>
-
-                                <div className="w-1/4 text-right">
+                                <div className="pl-44">
                                     <button
                                         onClick={() => handleAssign(queue)}
                                         className={`px-10 py-2 rounded-md text-white ${queue.queueNumber === currentQueue?.queueNumber
-                                                ? 'bg-green-500 hover:bg-green-600'
-                                                : 'bg-gray-300 cursor-not-allowed'
+                                            ? 'bg-green-500 hover:bg-green-600'
+                                            : 'bg-gray-300 cursor-not-allowed'
                                             }`}
                                         disabled={queue.queueNumber !== currentQueue?.queueNumber}
                                     >
@@ -442,4 +462,4 @@ const DashboardPage = () => {
     );
 };
 
-export default DashboardPage;
+export default NextDepartmentPage;

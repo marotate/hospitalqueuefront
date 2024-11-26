@@ -29,7 +29,7 @@ const DashboardPage = () => {
     const handleDepartmentSelect = (dept: string) => {
         setSelectedDept(dept);
         setDropdownVisible(false);
-    
+
         if (dept === 'Cardiology') {
             router.push('/admin/next-department');
         } else if (dept === 'Screening Center') {
@@ -48,53 +48,53 @@ const DashboardPage = () => {
             '/admin/payment-page': 'Payment',
             '/admin/dispensary': 'Dispensary',
         };
-    
+
         const newDept = deptMap[router.pathname];
         if (newDept && newDept !== selectedDept) {
             setSelectedDept(newDept);
         }
     }, [router.pathname]);
-    
+
 
     useEffect(() => {
         if (selectedDept) {
             fetchQueueData(selectedDept);
         }
     }, [selectedDept]);
-    
+
 
     useEffect(() => {
         console.log('Current path:', router.pathname);
         console.log('Selected department:', selectedDept);
     }, [router.pathname, selectedDept]);
 
-    
-    
+
+
 
     const fetchQueueData = async (department: string) => {
         try {
             setLoading(true);
-    
+
             const response = await fetch(
                 `https://203o7qhoh2.execute-api.us-east-1.amazonaws.com/queue/totalqueue?dept_name=${encodeURIComponent(
                     department
                 )}`,
                 { method: "GET" }
             );
-    
+
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-    
+
             const data = await response.json();
             console.log('Fetched data:', data); // Debug the response
-    
+
             if (!data || !('totalQueue' in data)) {
                 throw new Error('Invalid response structure');
             }
-    
+
             setTotalQueue(data.totalQueue || 0);
-    
+
             // Handle queues only if they exist in the response
             const fetchedQueues = data.queues || [];
             setWaitingQueues(fetchedQueues);
@@ -108,8 +108,8 @@ const DashboardPage = () => {
             setLoading(false);
         }
     };
-    
-      
+
+
 
     const handleAssign = (queue: Queue) => {
         if (queue === currentQueue) {
@@ -134,9 +134,9 @@ const DashboardPage = () => {
                     patient_lastname: selectedQueue.patient_lastname,
                     dept_name: department,
                 };
-    
+
                 console.log('Sending data to WebSocket:', message);
-    
+
                 if (websocketRef.current?.readyState === WebSocket.OPEN) {
                     websocketRef.current.send(JSON.stringify(message));
                     console.log('Queue successfully sent to WebSocket');
@@ -144,7 +144,7 @@ const DashboardPage = () => {
                     console.error('WebSocket is not connected');
                     alert('WebSocket connection is not established. Please try again.');
                 }
-    
+
                 // Reset modal state
                 setIsModalOpen(false);
                 setSelectedQueue(null);
@@ -212,7 +212,7 @@ const DashboardPage = () => {
             setCurrentQueue(nextQueue.length > 0 ? nextQueue[0] : null); // Set the next queue
         }
     };
-    
+
     // Use another effect for time updates
     useEffect(() => {
         const interval = setInterval(() => {
@@ -225,10 +225,10 @@ const DashboardPage = () => {
                 })
             );
         }, 1000);
-    
+
         return () => clearInterval(interval);
     }, []);
-    
+
 
 
     return (
@@ -314,16 +314,16 @@ const DashboardPage = () => {
                     <h1 className="text-xl font-bold text-black">Queue {currentQueue?.queueNumber}</h1>
                     <p className="text-gray-500">/ In progress on channel 1</p>
                 </div>
-                
-                    <div className="pl-10 text-right">
-                        <button
-                            onClick={handleNextQueue}
-                            className="bg-rose-500 text-white px-4 py-3 rounded-md"
-                        >
-                            Next Queue
-                        </button>
-                    </div>
-                
+
+                <div className="pl-10 text-right">
+                    <button
+                        onClick={handleNextQueue}
+                        className="bg-rose-500 text-white px-4 py-3 rounded-md"
+                    >
+                        Next Queue
+                    </button>
+                </div>
+
             </div>
 
             {/* Queue Sections */}
@@ -348,32 +348,32 @@ const DashboardPage = () => {
                 </div>
 
                 {/* Right Column: Waiting List */}
-<div className="bg-white shadow rounded-lg p-4">
-    <h2 className="text-xl font-bold text-gray-700 mb-4">Waiting List</h2>
-    <div className="border-t-2 border-gray-100 pt-2 space-y-4 overflow-y-auto max-h-[500px]">
-        {waitingQueues.map((queue) => (
-            <div
-            key={queue.queueNumber}
-            className="flex border-b pl-4 pb-2 items-center"
-        >
-            <p className="w-1/2 text-left flex items-center space-x-2">
-                <span className="font-bold text-lg text-black">{queue.queueNumber}</span>
-                <span className="text-sm text-gray-500 pl-4">{queue.patient_firstname} {queue.patient_lastname}</span>
-            </p>
-        
-            {queue === currentQueue ? (
-                <button
-                    className="w-[150px] py-2 rounded-md border-2 border-yellow-600 text-yellow-600 bg-white ml-auto"
-                    disabled
-                >
-                    In Progress
-                </button>
-            ) : null}
-        </div>
-        
-        ))}
-    </div>
-</div>
+                <div className="bg-white shadow rounded-lg p-4">
+                    <h2 className="text-xl font-bold text-gray-700 mb-4">Waiting List</h2>
+                    <div className="border-t-2 border-gray-100 pt-2 space-y-4 overflow-y-auto max-h-[500px]">
+                        {waitingQueues.map((queue) => (
+                            <div
+                                key={queue.queueNumber}
+                                className="flex border-b pl-4 pb-2 items-center"
+                            >
+                                <p className="w-1/2 text-left flex items-center space-x-2">
+                                    <span className="font-bold text-lg text-black">{queue.queueNumber}</span>
+                                    <span className="text-sm text-gray-500 pl-4">{queue.patient_firstname} {queue.patient_lastname}</span>
+                                </p>
+
+                                {queue === currentQueue ? (
+                                    <button
+                                        className="w-[150px] py-2 rounded-md border-2 border-yellow-600 text-yellow-600 bg-white ml-auto"
+                                        disabled
+                                    >
+                                        In Progress
+                                    </button>
+                                ) : null}
+                            </div>
+
+                        ))}
+                    </div>
+                </div>
 
             </div>
         </div>
