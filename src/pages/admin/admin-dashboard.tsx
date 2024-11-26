@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/router";
+import React, { useState, useEffect } from "react";
 
 type Queue = {
     queue_id: string;
@@ -12,13 +11,13 @@ type Queue = {
 };
 
 const DashboardPage = () => {
-    const router = useRouter();
+    //const router = useRouter();
     const [selectedDept, setSelectedDept] = useState<string>("Screening Center");
     const [loading, setLoading] = useState<boolean>(true);
     const [queues, setQueues] = useState<Queue[]>([]);
     const [roomInput, setRoomInput] = useState<{ [key: string]: string }>({});
     const [newDeptInput, setNewDeptInput] = useState<{ [key: string]: string }>({});
-    const websocketRef = useRef<WebSocket | null>(null);
+    //const websocketRef = useRef<WebSocket | null>(null);
 
     // Fetch queues when a department is selected
     useEffect(() => {
@@ -108,7 +107,7 @@ const DashboardPage = () => {
                 body: JSON.stringify({
                     queue_id: queueId,
                     dept_name: newDeptInput[queueId],
-                    room_number: "-", // Reset room_number when changing department
+                    room_number: null, // Reset room_number when changing department
                 }),
             }
         );
@@ -210,9 +209,9 @@ const DashboardPage = () => {
                                                 </>
                                             ) : (
                                                 <>
-                                                    <option value="1">Channel 1</option>
-                                                    <option value="2">Channel 2</option>
-                                                    <option value="3">Channel 3</option>
+                                                    <option value="1">Room 1</option>
+                                                    <option value="2">Room 2</option>
+                                                    <option value="3">Room 3</option>
                                                 </>
                                             )}
                                         </select>
