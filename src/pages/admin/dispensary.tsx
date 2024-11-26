@@ -1,4 +1,6 @@
-// admin-dashboard.tsx
+
+// กด Next queue แล้ว ลบ currentQueue ออกจาก db
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 
