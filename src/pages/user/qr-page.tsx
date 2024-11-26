@@ -1,128 +1,196 @@
-import { useState } from 'react';
+import { useRouter } from "next/router";
+import { useEffect, useState } from "react";
 
-export default function RegisterQueuePage() {
-  const [nationalId, setNationalId] = useState('');
-  const [error, setError] = useState('');
-  const [patientType, setPatientType] = useState<'new' | 'returning' | ''>('');
-  const [hasAppointment, setHasAppointment] = useState<boolean | null>(null);
-  const [queueCreated, setQueueCreated] = useState(false);
+interface QueueDetails {
+  queue_id: string;
+  patient_firstname: string;
+  patient_lastname: string;
+  queueNumber: string;
+  remaining_queue: number;
+  dept_name: string;
+  room_number: string;
+}
 
-  const isValidNationalId = (id: string) => /^[0-9]{13}$/.test(id);
+const QueueDetailsPage = () => {
+  const router = useRouter();
+  const { queue_id } = router.query; // Retrieve queue_id from the query parameters
+  const [queueDetails, setQueueDetails] = useState<QueueDetails | null>(null); // Store queue details
+  const [error, setError] = useState<string | null>(null); // Store error messages
+  const [loading, setLoading] = useState(true); // Loading state
+  const [wsStatus, setWsStatus] = useState<string>(""); // WebSocket connection status for debugging
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const id = e.target.value;
-    setNationalId(id);
-    setError('');
-    if (id && !isValidNationalId(id)) {
-      setError('National ID must be a 13-digit number');
+  useEffect(() => {
+    let isMounted = true; // Flag to prevent state updates after component unmount
+    let socket: WebSocket; // WebSocket instance
+
+    const fetchQueueDetails = async () => {
+      if (!queue_id) return;
+
+      try {
+        // Initial fetch to get queue details
+        const response = await fetch(
+          `https://jb3v9lrzx2.execute-api.us-east-1.amazonaws.com/queue/trackqueue?queue_id=${queue_id}`,
+          { method: "GET" }
+        );
+
+        if (response.ok) {
+          const result = await response.json();
+          if (isMounted) {
+            setQueueDetails(result.data); // Update state with fetched queue details
+            setWsStatus("Initial data fetched successfully.");
+          }
+        } else {
+          const errorData = await response.json();
+          if (isMounted) {
+            setError(errorData.message || "Failed to fetch queue details.");
+            setWsStatus("Error fetching initial data.");
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching queue details:", e);
+        if (isMounted) {
+          setError("An unexpected error occurred. Please try again.");
+          setWsStatus("Error during initial fetch.");
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false); // Set loading to false after fetching
+        }
+      }
+    };
+
+    fetchQueueDetails();
+
+    // Establish WebSocket connection
+    if (queue_id) {
+      socket = new WebSocket("wss://g3jo9j2tn5.execute-api.us-east-1.amazonaws.com/queue/");
+
+      socket.onopen = () => {
+        console.log("WebSocket connection opened.");
+        if (socket.readyState === WebSocket.OPEN) {
+          const queue_id_str = String(queue_id);
+          socket.send(JSON.stringify({ action: "trackqueue", queue_id }));
+          console.log(JSON.stringify({ action: "trackqueue", queue_id }));
+          console.log(queue_id_str);
+          console.log("send finish");
+        } else {
+          console.error("WebSocket is not open. Subscription message not sent.");
+        }
+      };
+
+      socket.onmessage = (event) => {
+        console.log("WebSocket message received1:", event.data);
+        try {
+          const data = JSON.parse(event.data);
+          console.log("WebSocket message received2:", data);
+
+          // Update queue details if the message matches the current queue_id
+          if (data.queue_id === queue_id && isMounted) {
+            console.log("Updating state with:", data);
+            setQueueDetails((prevDetails) => ({
+              ...prevDetails,
+              ...data, // Merge new data into existing queue details
+              //room_number: data.room_number || prevDetails?.room_number || "Not Assigned", // Retain old value if new one is null
+            }));
+            setWsStatus("Real-time update received.");
+          }
+        } catch (e) {
+          console.error("Error parsing WebSocket message:", e);
+          setWsStatus("Error parsing WebSocket message.");
+        }
+      };
+
+      socket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        if (isMounted) {
+          setError("WebSocket connection error.");
+          setWsStatus("WebSocket connection error.");
+        }
+      };
+
+      socket.onclose = () => {
+        console.log("WebSocket connection closed.");
+        setWsStatus("WebSocket connection closed.");
+      };
     }
-  };
 
-  const handlePatientTypeSelection = (type: 'new' | 'returning') => {
-    setPatientType(type);
-    setHasAppointment(null); // Reset appointment selection if switching patient type
-  };
+    // Cleanup on component unmount
+    return () => {
+      isMounted = false;
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        console.log("Closing WebSocket connection...");
+        socket.close();
+      }
+    };
+  }, [queue_id]);
 
-  const handleAppointmentSelection = (hasAppointment: boolean) => {
-    setHasAppointment(hasAppointment);
-  };
+  if (loading) {
+    return <p className="text-center text-gray-700 text-xl">Loading...</p>;
+  }
 
-  const handleSubmit = () => {
-    if (isValidNationalId(nationalId)) {
-      setQueueCreated(true); // Indicate that queue is created successfully
-    } else {
-      setError('Please enter a valid 13-digit National ID number');
-    }
-  };
+  if (error) {
+    return <p className="text-center text-red-500 text-xl">{error}</p>;
+  }
+
+  if (!queueDetails) {
+    return <p className="text-center text-gray-700 text-xl">No queue details available.</p>;
+  }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-blue-500 to-white">
-      <div className="bg-white shadow-lg rounded-lg p-8 w-full max-w-3xl">
-        <h1 className="text-4xl font-bold text-center mb-6 text-gray-700">Welcome to the Cloud Hospital</h1>
-        <p className="text-center mb-6 text-lg text-gray-500">Please enter your National ID number to create a queue</p>
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-blue-500 to-white">
+      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-lg my-4 text-center">
+        <div className="mb-8">
+          <h1 className="text-4xl font-extrabold text-blue-600">Cloud Hospital</h1>
+          <p className="text-lg text-gray-500 mt-2">Queue Tracking System</p>
+        </div>
 
-        <input
-          type="text"
-          value={nationalId}
-          onChange={handleInputChange}
-          placeholder="Enter National ID number"
-          maxLength={13}
-          className="w-full px-4 py-2 border rounded-md mb-6 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
-        />
-        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+        {/* Patient Name */}
+        <div className="mb-6">
+          <p className="text-2xl font-semibold text-gray-800">
+            {queueDetails.patient_firstname} {queueDetails.patient_lastname}
+          </p>
+        </div>
 
-        {/* Show patient type selection buttons */}
-        {!queueCreated && (
-          <>
-            <div className="flex justify-center mb-6">
-              <button
-                onClick={() => handlePatientTypeSelection('new')}
-                className={`px-4 py-2 mx-2 rounded-md font-bold ${patientType === 'new' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
-              >
-                New Patient
-              </button>
-              <button
-                onClick={() => handlePatientTypeSelection('returning')}
-                className={`px-4 py-2 mx-2 rounded-md font-bold ${patientType === 'returning' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
-              >
-                Returning Patient
-              </button>
+        {/* Queue Number */}
+        <div className="mb-6">
+          <p className="text-lg text-gray-600">Your Queue Number</p>
+          <p className="text-5xl font-extrabold text-blue-500">{queueDetails.queueNumber}</p>
+        </div>
+
+        {/* Remaining Queue */}
+        <div className="mb-6">
+          <p className="text-lg text-gray-600 mb-2">Queue Ahead</p>
+          <div className="flex justify-center items-center">
+            <div className="relative w-40 h-40 flex items-center justify-center">
+              <svg className="absolute w-full h-full" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="45" stroke="#e5e5e5" strokeWidth="10" fill="none" />
+              </svg>
+              <p className="text-5xl font-bold text-blue-500">{queueDetails.remaining_queue}</p>
             </div>
-
-            {/* Show appointment options if patient is returning */}
-            {patientType === 'returning' && (
-              <div className="mb-6 text-center">
-                <p className="text-lg text-gray-500 mb-2">Do you have an appointment?</p>
-                <button
-                  onClick={() => handleAppointmentSelection(true)}
-                  className={`px-4 py-2 mx-2 rounded-md font-bold ${hasAppointment === true ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
-                >
-                  Yes
-                </button>
-                <button
-                  onClick={() => handleAppointmentSelection(false)}
-                  className={`px-4 py-2 mx-2 rounded-md font-bold ${hasAppointment === false ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
-                >
-                  No
-                </button>
-              </div>
-            )}
-
-            {/* Show submit button if valid inputs are provided */}
-            <button
-              onClick={handleSubmit}
-              disabled={!isValidNationalId(nationalId) || (patientType === 'returning' && hasAppointment === null)}
-              className="w-full bg-blue-500 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-600 transition disabled:bg-blue-300 disabled:cursor-not-allowed"
-            >
-              Create Queue
-            </button>
-          </>
-        )}
-
-        {/* Display success message when queue is created */}
-        {queueCreated && (
-          <div className="text-center mt-6">
-            <h2 className="text-2xl font-bold text-gray-700">Queue Created Successfully!</h2>
-            <p className="text-lg text-gray-500 mt-4">
-              National ID: {nationalId}
-            </p>
-            <p className="text-lg text-gray-500 mt-2">
-              Patient Type: {patientType === 'new' ? 'New Patient' : 'Returning Patient'}
-            </p>
-            {patientType === 'returning' && hasAppointment !== null && (
-              <p className="text-lg text-gray-500 mt-2">
-                Appointment: {hasAppointment ? 'Yes' : 'No'}
-              </p>
-            )}
-            <button
-              onClick={() => setQueueCreated(false)} // Reset for new entry
-              className="mt-6 bg-blue-500 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-600 transition"
-            >
-              Reset
-            </button>
           </div>
-        )}
+        </div>
+
+        <p className="text-xl text-gray-800 font-extrabold mb-4">Please wait for your turn</p>
+        <div className="mt-8">
+          <p className="text-lg text-gray-800 font-semibold mb-2">Destination</p>
+          <button className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md">
+            {queueDetails.dept_name}
+          </button>
+          <p className="text-lg text-gray-800 font-semibold mt-6 mb-2">Room</p>
+          <div className="flex justify-center items-center mt-2">
+            <p className="bg-blue-600 text-2xl font-semibold text-white py-1 px-3 rounded-lg shadow-md">
+              {queueDetails.room_number}
+            </p>
+          </div>
+        </div>
+
+        {/* Debug WebSocket Status */}
+        <div className="mt-8">
+          <p className="text-sm text-gray-500">WebSocket Status: {wsStatus}</p>
+        </div>
       </div>
     </div>
   );
-}
+};
+
+export default QueueDetailsPage;
