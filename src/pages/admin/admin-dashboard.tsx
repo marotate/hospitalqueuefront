@@ -8,6 +8,7 @@ type Queue = {
     patient_firstname: string;
     patient_lastname: string;
     remaining_queue: number;
+    dept_name: string;
 };
 const DashboardPage = () => {
     const router = useRouter();
@@ -21,14 +22,13 @@ const DashboardPage = () => {
     const [selectedDept, setSelectedDept] = useState<string>('Screening Center');
     const [department, setDepartment] = useState('');
     const [currentTime, setCurrentTime] = useState('');
-    const [nextQueueVisible, setNextQueueVisible] = useState(false);
     const [dropdownVisible, setDropdownVisible] = useState(false);
     const websocketRef = useRef<WebSocket | null>(null);
 
     const handleDepartmentSelect = (dept: string) => {
         setSelectedDept(dept);
         setDropdownVisible(false);
-    
+
         if (dept === 'Cardiology') {
             router.push('/admin/next-department');
         } else if (dept === 'Screening Center') {
@@ -47,50 +47,50 @@ const DashboardPage = () => {
             '/admin/payment-page': 'Payment',
             '/admin/dispensary': 'Dispensary',
         };
-    
+
         const newDept = deptMap[router.pathname];
         if (newDept && newDept !== selectedDept) {
             setSelectedDept(newDept);
         }
     }, [router.pathname]);
-    
+
 
     useEffect(() => {
         if (selectedDept) {
             fetchQueueData(selectedDept);
         }
     }, [selectedDept]);
-    
+
 
     useEffect(() => {
         console.log('Current path:', router.pathname);
         console.log('Selected department:', selectedDept);
     }, [router.pathname, selectedDept]);
 
-    
+
     const fetchQueueData = async (department: string) => {
         try {
             setLoading(true);
-    
+
             const response = await fetch(
                 `https://203o7qhoh2.execute-api.us-east-1.amazonaws.com/queue/totalqueue?dept_name=${encodeURIComponent(department)}`,
                 { method: 'GET' }
             );
-    
+
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-    
+
             const data = await response.json();
             console.log('Fetched data:', data);
-    
+
             // Validate API response structure
             if (!data || typeof data.totalQueue !== 'number' || !Array.isArray(data.queues)) {
                 throw new Error('Invalid API response structure');
             }
-    
+
             setTotalQueue(data.totalQueue);
-    
+
             const filteredQueues = data.queues
                 .map((queue: any) => ({
                     queue_id: queue.queue_id,
@@ -100,20 +100,23 @@ const DashboardPage = () => {
                     remaining_queue: queue.remaining_queue,
                 }))
                 .sort((a: Queue, b: Queue) => a.remaining_queue - b.remaining_queue);
-    
+
             setWaitingQueues(filteredQueues);
             setCurrentQueue(filteredQueues.length > 0 ? filteredQueues[0] : null);
+
         } catch (error) {
             console.error('Error fetching queue data:', error);
             setTotalQueue(null);
             setWaitingQueues([]);
+            setQueues([]);
             setCurrentQueue(null);
         } finally {
             setLoading(false);
         }
     };
-    
-      
+
+
+
     const handleAssign = (queue: Queue) => {
         if (queue === currentQueue) {
             setSelectedQueue(queue);
@@ -136,9 +139,9 @@ const DashboardPage = () => {
                     dept_name: department,
                     room_number: null, // Pass room_number if available
                 };
-    
+
                 console.log('Sending payload to updatequeue endpoint:', payload);
-    
+
                 // Send the request to the update endpoint
                 const response = await fetch(
                     'https://duq6zvqdd3.execute-api.us-east-1.amazonaws.com/updatequeue/updatequeue',
@@ -150,16 +153,27 @@ const DashboardPage = () => {
                         body: JSON.stringify(payload),
                     }
                 );
-    
+
                 if (!response.ok) {
                     const errorText = await response.text();
                     console.error('Error response from API:', errorText);
                     throw new Error(`API Error: ${errorText}`);
                 }
-    
+
                 const result = await response.json();
                 console.log('Queue successfully updated:', result);
-    
+
+                // Update state
+                setWaitingQueues(prev => prev.filter(q => q.queue_id !== selectedQueue.queue_id));
+                setQueues(prev => [
+                    ...prev,
+                    { ...selectedQueue, dept_name: department },
+                ]);
+                setCurrentQueue(
+                    waitingQueues.length > 1 ? waitingQueues[1] : null
+                );
+
+
                 // Update state and UI
                 setIsModalOpen(false);
                 setSelectedQueue(null);
@@ -177,41 +191,41 @@ const DashboardPage = () => {
         }
     };
 
-    
+
     const connectWebSocket = () => {
         if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
             console.log("WebSocket already connected.");
             return;
         }
-    
+
         const websocket = new WebSocket('wss://g3jo9j2tn5.execute-api.us-east-1.amazonaws.com/queue/');
-    
+
         websocket.onopen = () => {
             console.log('WebSocket connection established');
             websocketRef.current = websocket;
         };
-    
+
         websocket.onclose = () => {
             console.log('WebSocket connection closed. Reconnecting...');
             websocketRef.current = null;
             setTimeout(connectWebSocket, 5000); // Retry after 5 seconds
         };
-    
+
         websocket.onerror = (error) => {
             console.error('WebSocket error:', error);
         };
-    
+
         websocket.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
                 console.log('WebSocket message received:', message);
-        
+
                 if (message.type === 'queueUpdate' && message.department === selectedDept) {
                     const updatedQueues = message.queues;
-        
+
                     // Sort the queues by remaining_queue
                     const sortedQueues = updatedQueues.sort((a: Queue, b: Queue) => a.remaining_queue - b.remaining_queue);
-        
+
                     // Update state
                     setWaitingQueues(sortedQueues);
                     setCurrentQueue(sortedQueues.length > 0 ? sortedQueues[0] : null);
@@ -220,14 +234,14 @@ const DashboardPage = () => {
                 console.error('Error processing WebSocket message:', error);
             }
         };
-        
+
     };
-    
+
     useEffect(() => {
         if (!websocketRef.current) {
             connectWebSocket();
         }
-    
+
         return () => {
             if (websocketRef.current) {
                 console.log('Closing WebSocket connection.');
@@ -235,19 +249,65 @@ const DashboardPage = () => {
                 websocketRef.current = null;
             }
         };
-    }, []); 
+    }, []);
 
-    const handleNextQueue = () => {
+    const handleNextQueue = async () => {
+        if (!currentQueue && waitingQueues.length > 0) {
+            // กด Next Queue ครั้งแรกเพื่อเริ่มต้น currentQueue
+            setCurrentQueue(waitingQueues[0]);
+            alert("Set the first queue as the current queue.");
+            return;
+        }
+    
         if (currentQueue) {
-            // Set the next queue as the currentQueue
-            const nextQueue = waitingQueues.length > 0 ? waitingQueues[0] : null;
-            setCurrentQueue(nextQueue);
+            try {
+                const payload = {
+                    queue_id: currentQueue.queue_id,
+                    room_number: "Channel 1",
+                };
+    
+                console.log("Updating room_number for currentQueue:", payload);
+    
+                const response = await fetch(
+                    'https://duq6zvqdd3.execute-api.us-east-1.amazonaws.com/updatequeue/updatequeue',
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(payload),
+                    }
+                );
+    
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error("Failed to update room_number:", errorText);
+                    throw new Error(`API Error: ${errorText}`);
+                }
+    
+                const result = await response.json();
+                console.log("Successfully updated room_number:", result);
 
-            // Show the Assign button for the next queue
-            setNextQueueVisible(false); // Disable Next Queue button
+                const nextQueue = waitingQueues.length > 1 ? waitingQueues[1] : null;
+                setCurrentQueue(nextQueue);
+
+                setWaitingQueues((prev) =>
+                    prev.filter((queue) => queue.queue_id !== currentQueue.queue_id)
+                );
+    
+                alert("Next queue is set as the current queue successfully!");
+            } catch (error) {
+                console.error("Error updating current queue room_number:", error);
+                alert("An error occurred while updating the current queue.");
+            }
         }
     };
     
+    
+    
+    
+    
+
     // Use another effect for time updates
     useEffect(() => {
         const interval = setInterval(() => {
@@ -260,10 +320,10 @@ const DashboardPage = () => {
                 })
             );
         }, 1000);
-    
+
         return () => clearInterval(interval);
     }, []);
-    
+
 
 
     return (
@@ -346,135 +406,119 @@ const DashboardPage = () => {
             {/* Current Queue */}
             <div className="flex justify-center items-center bg-white p-4 shadow rounded-b-md border-t-2 border-gray-100">
                 <div className="flex items-center space-x-2">
-                    <h1 className="text-xl font-bold text-black">Queue {currentQueue?.queueNumber}</h1>
-                    <p className="text-gray-500">/ In progress on channel 1</p>
+                <h1 className="text-xl font-bold text-black">
+            Queue {currentQueue ? currentQueue.queueNumber : "Not set"}
+        </h1>
+        <p className="text-gray-500">
+            {currentQueue ? "/ In progress on channel 1" : "/ Waiting to start"}
+        </p>
                 </div>
-                {nextQueueVisible && (
-                    <div className="text-right">
-                        <button
-                            onClick={handleNextQueue}
-                            className="bg-white border-2 border-rose-500 text-rose-500 px-4 py-2 rounded-md"
-                        >
-                            Next Queue
-                        </button>
+    
+                    <div className="pl-10 text-right">
+                    <button
+                        onClick={handleNextQueue}
+                        className="bg-rose-500 text-white px-4 py-3 rounded-md"
+                    >
+                        Next Queue
+                    </button>
                     </div>
-                )}
+               
             </div>
 
-            {/* Queue Sections */}
-            <div className="grid grid-cols-2 gap-6 mt-6">
-                {/* Left Column: Completed Queues */}
-                <div className="bg-white shadow rounded-lg p-4">
-                    <h2 className="text-xl font-bold text-gray-700 mb-4">Completed Queue</h2>
-                    <div className="space-y-4 overflow-y-auto max-h-[500px]">
-                        {queues.map((queue) => (
-                            <div
-                                key={queue.queue_id}
-                                className="flex justify-between items-center border-b pb-2"
-                            >
-                                <div>
-                                    <p className="font-bold text-black">{queue.queueNumber}</p>
-                                    <p className="text-sm text-gray-500">{queue.patient_firstname} {queue.patient_lastname}</p>
-                                </div>
 
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Right Column: Waiting List */}
-                <div className="bg-white shadow rounded-lg p-4">
-                    <h2 className="text-xl font-bold text-gray-700 mb-4">Waiting List</h2>
-                    <div className="space-y-4 overflow-y-auto max-h-[500px]">
-                        {waitingQueues.map((queue) => (
-                            <div
-                                key={queue.queueNumber}
-                                className="flex items-center justify-between border-b pb-2"
-                            >
-                                <p className="w-28 text-sm text-gray-500 text-left">
-                                    Queue
-                                </p>
-                                <p className="w-1/2 font-bold text-lg text-black text-left">
-                                    {queue.queueNumber}
-                                </p>
-
-                                <p className="w-1/2 text-sm text-gray-500 text-center">
-                                    {queue.patient_firstname} {queue.patient_lastname}
-                                </p>
-
-                                <div className="w-1/4 text-right">
-                                    <button
-                                        onClick={() => handleAssign(queue)}
-                                        className={`px-10 py-2 rounded-md text-white ${queue.queueNumber === currentQueue?.queueNumber
-                                                ? 'bg-green-500 hover:bg-green-600'
-                                                : 'bg-gray-300 cursor-not-allowed'
-                                            }`}
-                                        disabled={queue.queueNumber !== currentQueue?.queueNumber}
-                                    >
-                                        Assign
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-
-
-                {/* Waiting List */}
-                {isModalOpen && selectedQueue && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
-                        <div className="bg-white rounded-lg shadow-lg p-6 w-96">
-                            <h2 className="text-2xl font-bold text-black text-center mb-4">
-                                Queue {selectedQueue.queueNumber}
-                            </h2>
-                            <p className="text-center text-xl text-black mb-6">
-                                {selectedQueue.patient_firstname} {selectedQueue.patient_lastname}
+            {/* Right Column: Waiting List */}
+            <div className="bg-white shadow rounded-lg p-4">
+                <h2 className="text-xl font-bold text-gray-700 mb-4">Waiting List</h2>
+                <div className="space-y-4 overflow-y-auto max-h-[500px]">
+                    {waitingQueues.map((queue) => (
+                        <div
+                            key={queue.queueNumber}
+                            className="flex items-center justify-between border-b pb-2"
+                        >
+                            <p className="w-28 text-sm text-gray-500 text-left">
+                                Queue
                             </p>
-                            <div className="mb-4">
-                                <label
-                                    htmlFor="department"
-                                    className="block text-gray-700 mb-2 text-center"
-                                >
-                                    Select Department
-                                </label>
-                                <select
-                                    id="department"
-                                    value={department}
-                                    onChange={(e) => setDepartment(e.target.value)}
-                                    className="w-full border text-gray-500 border-gray-300 rounded-md px-3 py-2"
-                                >
-                                    <option value="" disabled hidden>
-                                        Assign a department
-                                    </option>
-                                    <option value="Cardiology">Cardiology</option>
-                                    <option value="Payment">Payment</option>
-                                    <option value="Dentistry">Dentistry</option>
-                                </select>
-                            </div>
-                            <div className="flex justify-end space-x-4">
+                            <p className="w-1/2 font-bold text-lg text-black text-left">
+                                {queue.queueNumber}
+                            </p>
+
+                            <p className="w-1/2 text-sm text-gray-500 text-center">
+                                {queue.patient_firstname} {queue.patient_lastname}
+                            </p>
+
+                            <div className="w-1/4 text-right">
                                 <button
-                                    onClick={handleCancel}
-                                    className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
+                                    onClick={() => handleAssign(queue)}
+                                    className={`px-10 py-2 rounded-md text-white ${currentQueue && queue.queueNumber === currentQueue.queueNumber
+                                        ? 'bg-green-500 hover:bg-green-600'
+                                        : 'bg-gray-300 cursor-not-allowed'
+                                        }`}
+                                        disabled={!currentQueue || queue.queueNumber !== currentQueue?.queueNumber}
                                 >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleConfirm}
-                                    disabled={!department}
-                                    className={`${department
-                                        ? 'bg-blue-500 hover:bg-blue-600'
-                                        : 'bg-blue-300 cursor-not-allowed'
-                                        } text-white px-4 py-2 rounded-md`}
-                                >
-                                    Confirm
+                                    Assign
                                 </button>
                             </div>
                         </div>
-                    </div>
-                )}
+                    ))}
+                </div>
             </div>
+
+
+
+            {/* Waiting List */}
+            {isModalOpen && selectedQueue && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
+                    <div className="bg-white rounded-lg shadow-lg p-6 w-96">
+                        <h2 className="text-2xl font-bold text-black text-center mb-4">
+                            Queue {selectedQueue.queueNumber}
+                        </h2>
+                        <p className="text-center text-xl text-black mb-6">
+                            {selectedQueue.patient_firstname} {selectedQueue.patient_lastname}
+                        </p>
+                        <div className="mb-4">
+                            <label
+                                htmlFor="department"
+                                className="block text-gray-700 mb-2 text-center"
+                            >
+                                Select Department
+                            </label>
+                            <select
+                                id="department"
+                                value={department}
+                                onChange={(e) => setDepartment(e.target.value)}
+                                className="w-full border text-gray-500 border-gray-300 rounded-md px-3 py-2"
+                            >
+                                <option value="" disabled hidden>
+                                    Assign a department
+                                </option>
+                                <option value="Cardiology">Cardiology</option>
+                                <option value="Payment">Payment</option>
+                                <option value="Dentistry">Dentistry</option>
+                            </select>
+                        </div>
+                        <div className="flex justify-end space-x-4">
+                            <button
+                                onClick={handleCancel}
+                                className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleConfirm}
+                                disabled={!department}
+                                className={`${department
+                                    ? 'bg-blue-500 hover:bg-blue-600'
+                                    : 'bg-blue-300 cursor-not-allowed'
+                                    } text-white px-4 py-2 rounded-md`}
+                            >
+                                Confirm
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
+
     );
 };
 
