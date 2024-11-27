@@ -284,7 +284,7 @@ export default function RegisterQueuePage() {
                     rel="noopener noreferrer"
                     className="text-blue-500 mt-4 hover:underline"
                   >
-                    Test QR Code Link
+                    QR Code
                   </a>
                 </div>
               </>

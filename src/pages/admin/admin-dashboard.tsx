@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 
+
 type Queue = {
     queue_id: string;
     queueNumber: string;
@@ -10,6 +11,7 @@ type Queue = {
     room_number: string;
 };
 
+
 const DashboardPage = () => {
     //const router = useRouter();
     const [selectedDept, setSelectedDept] = useState<string>("Screening Center");
@@ -19,12 +21,14 @@ const DashboardPage = () => {
     const [newDeptInput, setNewDeptInput] = useState<{ [key: string]: string }>({});
     //const websocketRef = useRef<WebSocket | null>(null);
 
+
     // Fetch queues when a department is selected
     useEffect(() => {
         if (selectedDept) {
             fetchQueues(selectedDept);
         }
     }, [selectedDept]);
+
 
     const fetchQueues = async (department: string) => {
         try {
@@ -36,9 +40,11 @@ const DashboardPage = () => {
                 { method: "GET" }
             );
 
+
             if (!response.ok) {
                 throw new Error("Failed to fetch queues");
             }
+
 
             const data = await response.json();
             setQueues(
@@ -51,11 +57,13 @@ const DashboardPage = () => {
         }
     };
 
+
     const handleAssignRoom = async (queueId: string) => {
         if (!roomInput[queueId]) {
             alert("Please select a room number.");
             return;
         }
+
 
         try {
             const response = await fetch(
@@ -70,11 +78,14 @@ const DashboardPage = () => {
                 }
             );
 
+
             if (!response.ok) {
                 throw new Error("Failed to assign room");
             }
 
+
             alert("Room assigned successfully!");
+
 
             // Update the state to show the room number immediately
             setQueues((prevQueues) =>
@@ -85,6 +96,7 @@ const DashboardPage = () => {
                 )
             );
 
+
             // Clear the input field for the room number
             setRoomInput((prev) => ({ ...prev, [queueId]: "" }));
         } catch (error) {
@@ -92,11 +104,13 @@ const DashboardPage = () => {
         }
     };
 
+
     const handleAssignDept = async (queueId: string) => {
     if (!newDeptInput[queueId]) {
         alert("Please select a department.");
         return;
     }
+
 
     try {
         const response = await fetch(
@@ -107,16 +121,19 @@ const DashboardPage = () => {
                 body: JSON.stringify({
                     queue_id: queueId,
                     dept_name: newDeptInput[queueId],
-                    room_number: null, // Reset room_number when changing department
+                    //room_number: "-", // Reset room_number when changing department
                 }),
             }
         );
+
 
         if (!response.ok) {
             throw new Error("Failed to assign department");
         }
 
+
         alert("Department assigned successfully!");
+
 
         // Update state to reflect the changes
         setQueues((prevQueues) =>
@@ -127,6 +144,7 @@ const DashboardPage = () => {
             )
         );
 
+
         setNewDeptInput((prev) => ({ ...prev, [queueId]: "" }));
         fetchQueues(selectedDept); // Refresh the queue list
     } catch (error) {
@@ -134,95 +152,121 @@ const DashboardPage = () => {
     }
 };
 
-    return (
-        <div className="min-h-screen bg-gradient-to-b from-blue-500 to-white p-4">
-            {/* Header Section */}
-            <div className="flex justify-between items-center bg-white p-4 shadow rounded-md">
-                <div>
-                    <h1 className="text-xl font-bold text-teal-500">Admin Dashboard</h1>
-                    <p className="text-sm text-gray-600">Manage queues and assignments</p>
-                </div>
-                <div>
-                    <select
-                        value={selectedDept}
-                        onChange={(e) => setSelectedDept(e.target.value)}
-                        className="border border-gray-300 rounded-md px-4 py-2"
-                    >
-                        <option value="Screening Center">Screening Center</option>
-                        <option value="Cardiology">Cardiology</option>
-                        <option value="Payment">Payment</option>
-                        <option value="Dispensary">Dispensary</option>
-                    </select>
-                </div>
-            </div>
+const handleDone = async (queueId: string) => {
+    try {
+        const response = await fetch(
+            "https://go3fdluwnf.execute-api.us-east-1.amazonaws.com/queue/deletequeue",
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    queue_id: queueId,
+                }),
+            }
+        );
 
-            {/* Queue List */}
-            <div className="mt-6 bg-white shadow rounded-lg p-6">
-                <h2 className="text-xl font-bold text-gray-700 mb-4">
-                    Queues in {selectedDept}
-                </h2>
-                {loading ? (
-                    <p>Loading...</p>
-                ) : queues.length === 0 ? (
-                    <p>No queues available for this department.</p>
-                ) : (
-                    <div className="space-y-4">
-                        {queues.map((queue) => (
-                            <div
-                                key={queue.queue_id}
-                                className="flex justify-between items-center border-b pb-4"
-                            >
+        if (!response.ok) {
+            throw new Error("Failed to mark as done");
+        }
+
+        alert("Queue deleted successfully!");
+        fetchQueues(selectedDept);
+    } catch (error) {
+        console.error("Error marking as done:", error);
+    }
+};
+
+
+return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-500 to-white p-4">
+        {/* Header Section */}
+        <div className="flex justify-between items-center bg-white p-4 shadow rounded-md">
+            <div>
+                <h1 className="text-xl font-bold text-teal-500">Admin Dashboard</h1>
+                <p className="text-sm text-gray-600">Manage queues and assignments</p>
+            </div>
+            <div>
+                <select
+                    value={selectedDept}
+                    onChange={(e) => setSelectedDept(e.target.value)}
+                    className="border border-gray-300 rounded-md px-4 py-2 text-black"
+                >
+                    <option value="Screening Center">Screening Center</option>
+                    <option value="Cardiology">Cardiology</option>
+                    <option value="Payment">Payment</option>
+                    <option value="Dispensary">Dispensary</option>
+                </select>
+            </div>
+        </div>
+
+        {/* Queue List */}
+        <div className="mt-6 bg-white shadow rounded-lg p-6">
+            <h2 className="text-xl font-bold text-gray-700 mb-4">
+                Queues in {selectedDept}
+            </h2>
+            {loading ? (
+                <p>Loading...</p>
+            ) : queues.length === 0 ? (
+                <p>No queues available for this department.</p>
+            ) : (
+                <div className="space-y-4">
+                    {queues.map((queue) => (
+                        <div
+                            key={queue.queue_id}
+                            className="flex justify-between items-center border-b pb-4"
+                        >
+                            <div>
+                                <p className="text-lg font-bold text-gray-800">
+                                    Queue {queue.queueNumber}
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                    {queue.patient_firstname} {queue.patient_lastname}
+                                </p>
+                                {queue.room_number && (
+                                    <p className="text-sm text-teal-500">
+                                        Room: {queue.room_number}
+                                    </p>
+                                )}
+                            </div>
+                            <div className="flex items-center space-x-4">
+                                {/* Assign Room */}
                                 <div>
-                                    <p className="text-lg font-bold text-gray-800">
-                                        Queue {queue.queueNumber}
-                                    </p>
-                                    <p className="text-sm text-gray-600">
-                                        {queue.patient_firstname} {queue.patient_lastname}
-                                    </p>
-                                    {queue.room_number && (
-                                        <p className="text-sm text-teal-500">
-                                            Room: {queue.room_number}
-                                        </p>
-                                    )}
+                                    <select
+                                        value={roomInput[queue.queue_id] || ""}
+                                        onChange={(e) =>
+                                            setRoomInput((prev) => ({
+                                                ...prev,
+                                                [queue.queue_id]: e.target.value,
+                                            }))
+                                        }
+                                        className="border border-gray-300 rounded-md px-2 py-1 text-black"
+                                    >
+                                        <option value="" disabled>
+                                            Select Room
+                                        </option>
+                                        {selectedDept === "Cardiology" ? (
+                                            <>
+                                                <option value="101">Room 101</option>
+                                                <option value="102">Room 102</option>
+                                                <option value="103">Room 103</option>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <option value="1">Room 1</option>
+                                                <option value="2">Room 2</option>
+                                                <option value="3">Room 3</option>
+                                            </>
+                                        )}
+                                    </select>
+                                    <button
+                                        onClick={() => handleAssignRoom(queue.queue_id)}
+                                        className="ml-2 bg-teal-500 text-white px-4 py-2 rounded-md"
+                                    >
+                                        Assign Room
+                                    </button>
                                 </div>
-                                <div className="flex items-center space-x-4">
-                                    {/* Assign Room */}
-                                    <div>
-                                        <select
-                                            value={roomInput[queue.queue_id] || ""}
-                                            onChange={(e) =>
-                                                setRoomInput((prev) => ({
-                                                    ...prev,
-                                                    [queue.queue_id]: e.target.value,
-                                                }))
-                                            }
-                                            className="border border-gray-300 rounded-md px-2 py-1"
-                                        >
-                                            <option value="" disabled>
-                                                Select Room
-                                            </option>
-                                            {selectedDept === "Cardiology" ? (
-                                                <>
-                                                    <option value="101">Room 101</option>
-                                                    <option value="102">Room 102</option>
-                                                    <option value="103">Room 103</option>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <option value="1">Room 1</option>
-                                                    <option value="2">Room 2</option>
-                                                    <option value="3">Room 3</option>
-                                                </>
-                                            )}
-                                        </select>
-                                        <button
-                                            onClick={() => handleAssignRoom(queue.queue_id)}
-                                            className="ml-2 bg-teal-500 text-white px-4 py-2 rounded-md"
-                                        >
-                                            Assign Room
-                                        </button>
-                                    </div>
-                                    {/* Assign Department */}
+                                {/* Assign Department */}
+                                {selectedDept !== "Dispensary" && (
                                     <div>
                                         <select
                                             value={newDeptInput[queue.queue_id] || ""}
@@ -232,7 +276,7 @@ const DashboardPage = () => {
                                                     [queue.queue_id]: e.target.value,
                                                 }))
                                             }
-                                            className="border border-gray-300 rounded-md px-2 py-1"
+                                            className="border border-gray-300 rounded-md px-2 py-1 text-black"
                                         >
                                             <option value="" disabled>
                                                 Select Department
@@ -251,14 +295,24 @@ const DashboardPage = () => {
                                             Assign Dept
                                         </button>
                                     </div>
-                                </div>
+                                )}
+                                {/* Done Button for Dispensary */}
+                                {selectedDept === "Dispensary" && (
+                                    <button
+                                        onClick={() => handleDone(queue.queue_id)}
+                                        className="ml-2 bg-green-500 text-white px-4 py-2 rounded-md"
+                                    >
+                                        Done
+                                    </button>
+                                )}
                             </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
-    );
+    </div>
+);
 };
 
 export default DashboardPage;
