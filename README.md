@@ -16,6 +16,7 @@ This project proposes a cloud-based queue management system using AWS to streaml
 
 ### Cloud Services Usage
 The Hospital Queue Management System uses AWS Amplify for hosting the frontend, Amazon API Gateway for managing API requests, AWS Lambda for backend logic, and Amazon DynamoDB for storing hospital queue data and patient's data.
+![Send notification (6)](https://github.com/user-attachments/assets/576fc3b1-1fee-4bb7-81a1-4f73ca7645e8)
 
 ### Software Testing and QA
 Using Robot Framework, Selenium Library, and Operating System Library to test the web application. 
